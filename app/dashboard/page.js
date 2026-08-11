@@ -46,11 +46,13 @@ export default function Dashboard() {
   const routines = useMemo(() => [...new Map(tasks.filter((task) => task.templateId).map((task) => [task.templateId, { id: task.templateId, title: task.title, color: task.color, icon: task.icon }])).values()], [tasks]);
 
   function changeMonth(offset) {
-    setMonth(new Date(year, monthNumber - 1 + offset, 1).toISOString().slice(0, 7));
+    const target = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+    setMonth(`${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}`);
   }
 
   function goToCurrentMonth() {
-    setMonth(new Date().toISOString().slice(0, 7));
+    const now = new Date();
+    setMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
   }
 
   async function updateTask(url, body) {
@@ -79,17 +81,17 @@ export default function Dashboard() {
         <button className="logout-button" onClick={logout}><LogOut size={17} />Logout</button>
       </header>
       <nav className="schedule-nav" aria-label="Month navigation">
-        <button onClick={() => changeMonth(-1)} disabled={isLoading}><ChevronLeft />Previous</button>
+        <button className="previous-month" onClick={() => changeMonth(-1)} disabled={isLoading}><ChevronLeft />Previous</button>
         <button className="current-month" onClick={goToCurrentMonth} disabled={isLoading}><CalendarDays size={20} />{monthFormatter.format(new Date(year, monthNumber - 1, 1))}</button>
-        <button onClick={() => changeMonth(1)} disabled={isLoading}>Next<ChevronRight /></button>
-        <button className="add-routine" aria-label="Add routine" onClick={() => setModalOpen(true)}><Plus size={21} /></button>
+        <button className="next-month" onClick={() => changeMonth(1)} disabled={isLoading}>Next<ChevronRight /></button>
+        <button className="add-routine" onClick={() => setModalOpen(true)}><Plus size={20} />Add routine</button>
       </nav>
       <div className={`tracker-wrap ${isLoading ? "is-loading" : ""}`}>
         <section className="tracker" style={{ gridTemplateColumns: `188px repeat(${Math.max(routines.length, 1)}, minmax(155px, 1fr))` }}>
           <div className="tracker-head date-head"><CalendarDays size={18} />Date</div>
           {routines.length ? routines.map((routine) => <div className="tracker-head routine-head" style={{ "--routine": routine.color }} key={routine.id}><RoutineIcon name={routine.icon} /><span>{routine.title}</span></div>) : <div className="tracker-head routine-head">Add your first routine</div>}
           {dates.map((date) => <div className="grid-row" key={date}>
-            <div className="date-cell">{new Date(date + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" })}</div>
+            <div className="date-cell">{`${date.slice(8, 10)}-${date.slice(5, 7)}-${date.slice(0, 4)}`}</div>
             {routines.length ? routines.map((routine) => {
               const task = (tasksByDate[date] || []).find((item) => item.templateId === routine.id);
               return <div className="routine-cell" style={{ "--routine": routine.color }} key={routine.id}>{task && <button className={`schedule-check ${task.completed ? "done" : ""}`} onClick={() => updateTask(`/api/tasks/${task._id}`, { action: "toggle", completed: !task.completed })}>{task.completed && <Check />}</button>}</div>;
