@@ -14,6 +14,7 @@ function RoutineIcon({ name, size = 21 }) { const Icon = icons[name] || Star; re
 export default function Dashboard() {
   const [month, setMonth] = useState(localMonth);
   const [tasks, setTasks] = useState([]);
+  const [user, setUser] = useState(null);
   const [planned, setPlanned] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -31,8 +32,6 @@ export default function Dashboard() {
   const [year, monthNumber] = month.split("-").map(Number);
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
   const canEdit = month >= localMonth();
-  console.log(day);
-  
 
   async function loadMonth(signal) {
     setIsLoading(true);
@@ -41,6 +40,7 @@ export default function Dashboard() {
       const data = await response.json();
       setTasks(data.tasks || []);
       setPlanned(Boolean(data.planned));
+      if (data.user) setUser(data.user);
     } catch (error) { if (error.name !== "AbortError") console.error(error); }
     finally { setIsLoading(false); }
   }
@@ -75,7 +75,7 @@ export default function Dashboard() {
   const toggleWeekday = value => setWeekdays(current => current.includes(value) ? current.filter(dayValue => dayValue !== value) : [...current, value]);
 
   return <main className="schedule-page"><div className="schedule-card">
-    <header className="schedule-header"><h1>Daily Schedule Routine Track</h1><button className="logout-button" onClick={logout}><LogOut size={17} />Logout</button></header>
+    <header className="schedule-header"><div className="profile-summary" aria-label="Signed-in user"><span className="profile-avatar">{user?.name?.trim()?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}</span><span className="profile-copy"><b>{user?.name || "Loading…"}</b><small>{user?.email || ""}</small></span></div><h1>Daily Schedule Routine Track</h1><button className="logout-button" onClick={logout}><LogOut size={17} />Logout</button></header>
     <nav className="schedule-nav" aria-label="Month navigation"><button className="previous-month" onClick={() => changeMonth(-1)} disabled={isLoading}><ChevronLeft />Previous</button><button className="current-month" onClick={() => setMonth(localMonth())} disabled={isLoading}><CalendarDays size={20} />{monthFormatter.format(new Date(year, monthNumber - 1, 1))}</button><button className="next-month" onClick={() => changeMonth(1)} disabled={isLoading}>Next<ChevronRight /></button>{canEdit && (planned ? <button className="add-routine" onClick={() => resetForm()}><Plus size={20} />Add routine</button> : <button className="create-plan" onClick={createPlan}><Plus size={19} />Create month plan</button>)}</nav>
     {!planned && <div className="plan-empty"><CalendarDays size={24} /><div><b>{canEdit ? "This month has no plan yet." : "No plan was created for this month."}</b><span>{canEdit ? "Create a plan to copy your active routines, then adjust it as needed." : "Past months remain read-only."}</span></div></div>}
     <div className={`tracker-wrap ${isLoading ? "is-loading" : ""}`}><section className="tracker" style={{ gridTemplateColumns: `var(--date-column) repeat(${Math.max(routines.length, 1)}, minmax(var(--routine-column), 1fr))` }}>

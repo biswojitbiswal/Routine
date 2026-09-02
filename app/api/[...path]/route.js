@@ -47,8 +47,11 @@ export async function POST(req, { params }) {
       ? await database.collection("taskTemplates").find({ userId, _id: { $in: templateIds } }).project({ createdAt: 1 }).toArray()
       : [];
     const templateCreatedAt = new Map(templates.map(template => [template._id.toString(), template.createdAt]));
-    const plan = await database.collection("monthPlans").findOne({ userId, month });
-    return ok({ planned: Boolean(plan) || tasks.length > 0, tasks: tasks.map(task => ({ ...task, _id: task._id.toString(), templateId: task.templateId?.toString(), templateCreatedAt: templateCreatedAt.get(task.templateId?.toString()) || task.createdAt })) });
+    const [plan, user] = await Promise.all([
+      database.collection("monthPlans").findOne({ userId, month }),
+      database.collection("users").findOne({ _id: userId }, { projection: { name: 1, email: 1 } }),
+    ]);
+    return ok({ user: user ? { name: user.name, email: user.email } : null, planned: Boolean(plan) || tasks.length > 0, tasks: tasks.map(task => ({ ...task, _id: task._id.toString(), templateId: task.templateId?.toString(), templateCreatedAt: templateCreatedAt.get(task.templateId?.toString()) || task.createdAt })) });
   }
 
   if (path[0] === "plans") {
