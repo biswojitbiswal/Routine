@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import PasswordInput from "@/app/components/PasswordInput";
 export default function Auth() {
     const { mode } = useParams(),
         router = useRouter(),
@@ -29,12 +30,12 @@ export default function Auth() {
                 <h2>{signup ? "Create your flow" : forgot ? "Reset your password" : "Good to see you"}</h2>
                 <p className="muted">{signup ? "Start with the little things. They add up." : forgot ? "Sign in, then use Change password in Account." : "Your routines are waiting."}</p>
                 <form onSubmit={submit}>{signup &&
-                    <label>Name<input name="name" placeholder="What should we call you?" required /></label>
+                    <label>Name<input name="name" placeholder="What should we call you?" required suppressHydrationWarning /></label>
                 }
-                    <label>Email<input name="email" type="email" placeholder="you@example.com" required /></label>
-                    {!forgot && <label>Password<input name="password" type="password" minLength="6" placeholder="At least 6 characters" required /></label>}
+                    <label>Email<input name="email" type="email" placeholder="you@example.com" required suppressHydrationWarning /></label>
+                    {!forgot && <PasswordInput name="password" minLength="6" placeholder="At least 6 characters" required />}
                     {error && <p className={forgot ? "notice" : "error"}>{error}</p>}
-                    <button className="primary" disabled={busy}>{busy ? "Just a moment…" : forgot ? "Send reset guidance" : "Continue"}<ArrowRight size={18} /></button>
+                    <button className="primary" disabled={busy} suppressHydrationWarning>{busy ? "Just a moment…" : forgot ? "Send reset guidance" : "Continue"}<ArrowRight size={18} /></button>
                 </form>
                 <p className="switch">{signup ? "Already have an account?" : "New here?"}
                     <a href={signup ? "/signin" : "/signup"}>{signup ? "Sign in" : "Create an account"}</a>

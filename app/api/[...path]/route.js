@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { ObjectId } from "mongodb";
 import { db } from "@/lib/db";
 import { clearSession, currentUserId, setSession } from "@/lib/auth";
-import { materializeMonth } from "@/lib/month";
+import { materializeMonth, normalizeLegacyTemplates } from "@/lib/month";
 
 const ok = data => NextResponse.json(data);
 const fail = (error, status = 400) => NextResponse.json({ error }, { status });
@@ -40,9 +40,15 @@ export async function POST(req, { params }) {
 
   if (path[0] === "dashboard") {
     const month = body.month || todayMonth();
-    const tasks = await database.collection("tasks").find({ userId, date: { $regex: `^${month}` } }).sort({ date: 1, title: 1 }).toArray();
+    await normalizeLegacyTemplates(database, userId);
+    const tasks = await database.collection("tasks").find({ userId, date: { $regex: `^${month}` } }).sort({ date: 1 }).toArray();
+    const templateIds = [...new Map(tasks.filter(task => task.templateId).map(task => [task.templateId.toString(), task.templateId])).values()];
+    const templates = templateIds.length
+      ? await database.collection("taskTemplates").find({ userId, _id: { $in: templateIds } }).project({ createdAt: 1 }).toArray()
+      : [];
+    const templateCreatedAt = new Map(templates.map(template => [template._id.toString(), template.createdAt]));
     const plan = await database.collection("monthPlans").findOne({ userId, month });
-    return ok({ planned: Boolean(plan) || tasks.length > 0, tasks: tasks.map(task => ({ ...task, _id: task._id.toString(), templateId: task.templateId?.toString() })) });
+    return ok({ planned: Boolean(plan) || tasks.length > 0, tasks: tasks.map(task => ({ ...task, _id: task._id.toString(), templateId: task.templateId?.toString(), templateCreatedAt: templateCreatedAt.get(task.templateId?.toString()) || task.createdAt })) });
   }
 
   if (path[0] === "plans") {
@@ -71,13 +77,15 @@ export async function POST(req, { params }) {
       if (body.action === "stop") {
         const fromDate = month === todayMonth() ? todayDate() : `${month}-01`;
         await database.collection("tasks").deleteMany({ userId, templateId, date: { $gte: fromDate, $regex: `^${month}` } });
+        await database.collection("taskTemplates").updateOne({ _id: templateId, userId }, { $addToSet: { excludedMonths: month } });
         return ok({ ok: true });
       }
       if (body.action === "remove-month") {
         await database.collection("tasks").deleteMany({ userId, templateId, date: { $regex: `^${month}` } });
+        await database.collection("taskTemplates").updateOne({ _id: templateId, userId }, { $addToSet: { excludedMonths: month } });
         return ok({ ok: true });
       }
-      const changes = { title: body.title, color: body.color, icon: body.icon, frequency: body.frequency, weekdays: body.weekdays || [], day: Number(body.day) || 1, targetDate: body.targetDate || null, startDate: body.startDate || null, endDate: body.endDate || null };
+      const changes = { title: body.title, color: body.color, icon: body.icon, frequency: body.frequency, weekdays: body.weekdays || [], day: Number(body.day) || 1, targetDate: body.targetDate || null, startDate: body.startDate || null, endDate: body.endDate || null, scopeMonth: month };
       await database.collection("taskTemplates").updateOne({ _id: templateId, userId }, { $set: changes });
       await database.collection("tasks").deleteMany({ userId, templateId, date: { $regex: `^${month}` } });
       await materializeMonth(database, uid, month);
@@ -85,7 +93,7 @@ export async function POST(req, { params }) {
     }
 
     const now = new Date();
-    const template = { userId, title: body.title, color: body.color || "#168d2a", icon: body.icon || "star", frequency: body.frequency || "daily", weekdays: body.weekdays || [], day: Number(body.day) || 1, targetDate: body.targetDate || null, startDate: body.startDate || null, endDate: body.endDate || null, active: true, createdAt: now };
+    const template = { userId, scopeMonth: month, title: body.title, color: body.color || "#168d2a", icon: body.icon || "star", frequency: body.frequency || "daily", weekdays: body.weekdays || [], day: Number(body.day) || 1, targetDate: body.targetDate || null, startDate: body.startDate || null, endDate: body.endDate || null, active: true, createdAt: now };
     const result = await database.collection("taskTemplates").insertOne(template);
     await materializeMonth(database, uid, month);
     return ok({ ok: true, id: result.insertedId.toString() });
