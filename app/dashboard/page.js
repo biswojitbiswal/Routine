@@ -8,11 +8,14 @@ const icons = { walk: PersonStanding, exercise: Dumbbell, breakfast: Utensils, s
 const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const localMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const dateForMonth = month => month === localMonth() ? localDate() : `${month}-01`;
 
 function RoutineIcon({ name, size = 21 }) { const Icon = icons[name] || Star; return <Icon size={size} strokeWidth={2.4} />; }
 
 export default function Dashboard() {
   const [month, setMonth] = useState(localMonth);
+  const [selectedDate, setSelectedDate] = useState(() => dateForMonth(localMonth()));
   const [tasks, setTasks] = useState([]);
   const [user, setUser] = useState(null);
   const [planned, setPlanned] = useState(false);
@@ -44,13 +47,16 @@ export default function Dashboard() {
     } catch (error) { if (error.name !== "AbortError") console.error(error); }
     finally { setIsLoading(false); }
   }
-  useEffect(() => { const controller = new AbortController(); loadMonth(controller.signal); return () => controller.abort(); }, [month]);
+  useEffect(() => { const controller = new AbortController(); setSelectedDate(dateForMonth(month)); loadMonth(controller.signal); return () => controller.abort(); }, [month]);
 
   const dates = Array.from({ length: daysInMonth }, (_, index) => `${month}-${String(index + 1).padStart(2, "0")}`);
   const tasksByDate = useMemo(() => Object.groupBy(tasks, task => task.date), [tasks]);
   const routines = useMemo(() => [...new Map(tasks.filter(task => task.templateId).map(task => [task.templateId, { id: task.templateId, title: task.title, color: task.color, icon: task.icon, frequency: task.frequency || "daily", weekdays: task.weekdays || [], day: task.day || 1, targetDate: task.targetDate || "", startDate: task.startDate || "", endDate: task.endDate || "", createdAt: task.templateCreatedAt || task.createdAt }])).values()].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt) || a.id.localeCompare(b.id)), [tasks]);
+  const selectedTasks = useMemo(() => tasks.filter(task => task.date === selectedDate).sort((a, b) => new Date(a.templateCreatedAt || a.createdAt) - new Date(b.templateCreatedAt || b.createdAt)), [tasks, selectedDate]);
+  const selectedComplete = selectedTasks.filter(task => task.completed).length;
 
   function changeMonth(offset) { const target = new Date(Date.UTC(year, monthNumber - 1 + offset, 1)); setMonth(`${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}`); }
+  function changeSelectedDay(offset) { const target = new Date(`${selectedDate}T12:00:00`); target.setDate(target.getDate() + offset); const next = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`; if (next.startsWith(month)) setSelectedDate(next); }
   function resetForm(routine = null) {
     setEditing(routine); setTitle(routine?.title || ""); setFrequency(routine?.frequency || "daily"); setColor(routine?.color || palette[0]); setIcon(routine?.icon || "star"); setWeekdays(routine?.weekdays || []); setDay(routine?.day || 1); setTargetDate(routine?.targetDate || ""); setStartDate(routine?.startDate || ""); setEndDate(routine?.endDate || ""); setModalOpen(true);
   }
@@ -78,6 +84,12 @@ export default function Dashboard() {
     <header className="schedule-header"><div className="profile-summary" aria-label="Signed-in user"><span className="profile-avatar">{user?.name?.trim()?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}</span><span className="profile-copy"><b>{user?.name || "Loading…"}</b><small>{user?.email || ""}</small></span></div><h1>Daily Schedule Routine Track</h1><button className="logout-button" onClick={logout}><LogOut size={17} />Logout</button></header>
     <nav className="schedule-nav" aria-label="Month navigation"><button className="previous-month" onClick={() => changeMonth(-1)} disabled={isLoading}><ChevronLeft />Previous</button><button className="current-month" onClick={() => setMonth(localMonth())} disabled={isLoading}><CalendarDays size={20} />{monthFormatter.format(new Date(year, monthNumber - 1, 1))}</button><button className="next-month" onClick={() => changeMonth(1)} disabled={isLoading}>Next<ChevronRight /></button>{canEdit && (planned ? <button className="add-routine" onClick={() => resetForm()}><Plus size={20} />Add routine</button> : <button className="create-plan" onClick={createPlan}><Plus size={19} />Create month plan</button>)}</nav>
     {!planned && <div className="plan-empty"><CalendarDays size={24} /><div><b>{canEdit ? "This month has no plan yet." : "No plan was created for this month."}</b><span>{canEdit ? "Create a plan to copy your active routines, then adjust it as needed." : "Past months remain read-only."}</span></div></div>}
+    <section className="mobile-agenda" aria-label="Daily routine agenda">
+      <div className="agenda-heading"><div><span>DAILY FLOW</span><h2>{new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric" }).format(new Date(`${selectedDate}T12:00:00`))}</h2></div><div className="agenda-score"><b>{selectedTasks.length ? Math.round(selectedComplete / selectedTasks.length * 100) : 0}%</b><small>complete</small></div></div>
+      <div className="agenda-date-nav"><button onClick={() => changeSelectedDay(-1)} disabled={selectedDate === `${month}-01`} aria-label="Previous day"><ChevronLeft /></button><label><CalendarDays size={17} /><input type="date" value={selectedDate} min={`${month}-01`} max={`${month}-${String(daysInMonth).padStart(2, "0")}`} onChange={event => setSelectedDate(event.target.value)} aria-label="Choose agenda date" /></label><button onClick={() => changeSelectedDay(1)} disabled={selectedDate === `${month}-${String(daysInMonth).padStart(2, "0")}`} aria-label="Next day"><ChevronRight /></button></div>
+      <div className="agenda-progress"><span style={{ width: `${selectedTasks.length ? selectedComplete / selectedTasks.length * 100 : 0}%` }} /></div>
+      <div className="agenda-list">{selectedTasks.length ? selectedTasks.map(task => <article className={`agenda-task ${task.completed ? "is-complete" : ""}`} style={{ "--routine": task.color }} key={task._id}><span className="agenda-icon"><RoutineIcon name={task.icon} size={20} /></span><div><b>{task.title}</b><small>{task.completed ? "Completed" : "Ready for today"}</small></div><button disabled={!canEdit} onClick={() => updateTask(`/api/tasks/${task._id}`, { action: "toggle", completed: !task.completed })} aria-label={`${task.completed ? "Uncheck" : "Complete"} ${task.title}`}>{task.completed && <Check />}</button></article>) : <div className="agenda-empty"><Star size={25} /><b>No routines for this day</b><span>{planned ? "Choose another date or add a routine to this month." : "Create a month plan to start your daily flow."}</span></div>}</div>
+    </section>
     <div className={`tracker-wrap ${isLoading ? "is-loading" : ""}`}><section className="tracker" style={{ gridTemplateColumns: `var(--date-column) repeat(${Math.max(routines.length, 1)}, minmax(var(--routine-column), 1fr))` }}>
       <div className="tracker-head date-head"><CalendarDays size={18} />Date</div>
       {routines.length ? routines.map(routine => <div className="tracker-head routine-head" style={{ "--routine": routine.color }} key={routine.id}><RoutineIcon name={routine.icon} /><span title={routine.title}>{routine.title}</span>{canEdit && <div className="routine-actions"><button title={`Edit ${routine.title}`} aria-label={`Edit ${routine.title}`} onClick={() => resetForm(routine)}><Pencil size={13} /></button><button title={`Remove ${routine.title}`} aria-label={`Remove ${routine.title}`} onClick={() => setRemoveTarget(routine)}><Trash2 size={13} /></button></div>}</div>) : <div className="tracker-head routine-head">{planned ? "Add your first routine" : "No routines"}</div>}
